@@ -12,7 +12,9 @@ import sys
 import time
 
 SOCKET_PATH = "/tmp/parakeet-lazy.sock"
-DAEMON_PATH = os.path.expanduser("~/.openclaw/tools/parakeet/parakeet-lazy-daemon.py")
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DAEMON_PATH = os.path.join(SCRIPT_DIR, "parakeet-lazy-daemon.py")
+VENV_PYTHON = os.path.join(SCRIPT_DIR, ".venv", "bin", "python")
 
 def ensure_daemon():
     """Check if daemon is running, start it if not."""
@@ -23,10 +25,11 @@ def ensure_daemon():
         return  # daemon already running
     except Exception:
         pass
-    # Start daemon in background
+    # Start daemon in background with venv Python
+    python_exe = VENV_PYTHON if os.path.exists(VENV_PYTHON) else sys.executable
     try:
         subprocess.Popen(
-            [sys.executable, DAEMON_PATH],
+            [python_exe, DAEMON_PATH],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True

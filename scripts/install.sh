@@ -73,7 +73,7 @@ pip install --upgrade pip
 pip install onnxruntime librosa soundfile
 
 # Download and extract model if not present
-if [ ! -d "$MODEL_DIR" ] || [ ! -f "$MODEL_DIR/model.onnx" ]; then
+if [ ! -d "$MODEL_DIR" ] || [ ! -f "$MODEL_DIR/encoder-model.int8.onnx" ]; then
     echo ""
     echo "Downloading Parakeet TDT $VERSION model (~$MODEL_SIZE)..."
     echo "URL: $MODEL_URL"
@@ -147,36 +147,67 @@ done
 configure_openclaw() {
     echo "Configuring OpenClaw to use Parakeet for audio transcription..."
     
-    # Use config.patch RPC for partial update
-    if command -v openclaw &> /dev/null; then
-        # Get current config hash (required for config.patch)
-        # Hash is at root level in the response, extract with grep
-        CONFIG_HASH=$(openclaw gateway call config.get --params '{}' --json 2>/dev/null | grep -oP '"hash"\s*:\s*"\K[^"]+' | tail -1)
-        
-        if [ -n "$CONFIG_HASH" ] && [ "$CONFIG_HASH" != "null" ]; then
-            openclaw gateway call config.patch --params '{
-                "raw": "{ tools: { media: { audio: { models: [{ \"type\": \"cli\", \"command\": \"'$PARAKEET_DIR'/parakeet-audio-client.py\", \"args\": [\"{{MediaPath}}\"] }] } } } } }",
-                "baseHash": "'$CONFIG_HASH'"
-            }' 2>/dev/null && {
-                echo "Applied config.patch - Parakeet configured and gateway reloaded"
-                return 0
-            } || {
-                echo "Warning: config.patch failed"
-            }
-        else
-            echo "Warning: Could not get config hash for config.patch"
-        fi
-    else
-        echo "Warning: openclaw CLI not found"
+    CONFIG_FILE="$HOME/.openclaw/openclaw.json"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "Warning: OpenClaw config not found at $CONFIG_FILE"
+        echo "Please configure manually after running 'openclaw configure'"
+        return 1
     fi
     
-    # Fallback: manual instructions
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Warning: jq not found. Please install jq for automatic config."
+        echo "Then re-run this script or configure manually."
+        return 1
+    fi
+    
+    # Build the audio config
+    AUDIO_CONFIG=$(cat <<EOF
+{
+  "enabled": true,
+  "scope": {
+    "default": "deny",
+    "rules": [{ "action": "allow", "match": { "chatType": "direct" } }]
+  },
+  "models": [{
+    "type": "cli",
+    "command": "$PARAKEET_DIR/parakeet-audio-client.py",
+    "args": ["{{MediaPath}}"]
+  }]
+}
+EOF
+)
+    
+    # Merge into config using jq
+    # This creates tools.media.audio if it doesn't exist, or updates it
+    TMP_CONFIG=$(mktemp)
+    jq --argjson audio "$AUDIO_CONFIG" '
+      .tools.media.audio = $audio
+    ' "$CONFIG_FILE" > "$TMP_CONFIG" && mv "$TMP_CONFIG" "$CONFIG_FILE"
+    
+    echo "Config updated successfully"
+    
+    # Restart gateway to pick up changes
+    if command -v openclaw &> /dev/null; then
+        echo "Restarting OpenClaw gateway..."
+        openclaw gateway restart 2>/dev/null || {
+            echo "Note: Gateway restart failed. Run 'openclaw gateway restart' manually."
+        }
+    fi
+    
+    return 0
+}
+
+configure_openclaw || {
     echo ""
-    echo "Please manually add to your openclaw.json:"
+    echo "Automatic config failed. Please manually add to your openclaw.json:"
     echo ""
     echo '  "tools": {'
     echo '    "media": {'
     echo '      "audio": {'
+    echo '        "enabled": true,'
+    echo '        "scope": { "default": "deny", "rules": [{ "action": "allow", "match": { "chatType": "direct" } }] },'
     echo '        "models": [{'
     echo '          "type": "cli",'
     echo '          "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
@@ -188,8 +219,6 @@ configure_openclaw() {
     echo ""
     echo "Then run: openclaw gateway restart"
 }
-
-configure_openclaw || true
 
 echo ""
 echo "=== Installation Complete ==="

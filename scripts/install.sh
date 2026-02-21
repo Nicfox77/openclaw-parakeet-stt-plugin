@@ -8,7 +8,6 @@ set -e
 # Configuration
 PARAKEET_DIR="${PARAKEET_DIR:-$HOME/.openclaw/tools/parakeet}"
 VENV_DIR="$PARAKEET_DIR/.venv"
-OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
 
 # Model URLs (GitHub release - mirrored from Handy project)
 # Fallback to Handy if GitHub is unavailable
@@ -146,64 +145,51 @@ done
 
 # Configure OpenClaw to use Parakeet for audio transcription
 configure_openclaw() {
-    if [ ! -f "$OPENCLAW_CONFIG" ]; then
-        echo "Warning: OpenClaw config not found at $OPENCLAW_CONFIG"
-        return 1
-    fi
-    
-    # Check if parakeet is already configured
-    if jq -e '.tools.media.audio.models[]? | select(.command | contains("parakeet"))' "$OPENCLAW_CONFIG" > /dev/null 2>&1; then
-        echo "Parakeet already configured in OpenClaw"
-        return 0
-    fi
-    
     echo "Configuring OpenClaw to use Parakeet for audio transcription..."
     
-    # Use config.patch RPC for partial update (cleaner than modifying file directly)
+    # Use config.patch RPC for partial update (no jq needed)
     if command -v openclaw &> /dev/null; then
-        local patch_json=$(cat <<EOF
-{
-  "patch": {
-    "tools": {
-      "media": {
-        "audio": {
-          "models": [
-            {
-              "type": "cli",
-              "command": "$PARAKEET_DIR/parakeet-audio-client.py",
-              "args": ["{{MediaPath}}", "{{OutputDir}}"]
+        openclaw gateway call config.patch --params '{
+            "patch": {
+                "tools": {
+                    "media": {
+                        "audio": {
+                            "models": [{
+                                "type": "cli",
+                                "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
+                                "args": ["{{MediaPath}}", "{{OutputDir}}"]
+                            }]
+                        }
+                    }
+                }
             }
-          ]
-        }
-      }
-    }
-  }
-}
-EOF
-)
-        openclaw gateway call config.patch --params "$patch_json" 2>/dev/null && {
+        }' 2>/dev/null && {
             echo "Applied config.patch - Parakeet configured and gateway reloaded"
             return 0
         } || {
-            echo "config.patch failed, falling back to file modification..."
+            echo "Warning: config.patch failed"
         }
+    else
+        echo "Warning: openclaw CLI not found"
     fi
     
-    # Fallback: modify config file directly if jq available
-    if command -v jq &> /dev/null; then
-        local tmp_config=$(mktemp)
-        jq '.tools.media.audio.models += [{
-            "type": "cli",
-            "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
-            "args": ["{{MediaPath}}", "{{OutputDir}}"]
-        }]' "$OPENCLAW_CONFIG" > "$tmp_config" && mv "$tmp_config" "$OPENCLAW_CONFIG"
-        echo "Added Parakeet to tools.media.audio.models (file modified directly)"
-        echo "Note: Gateway will auto-reload, or run: openclaw gateway restart"
-    else
-        echo "Warning: jq not found, skipping automatic config"
-        echo "Please manually add to openclaw.json:"
-        echo '  tools.media.audio.models: [{"type": "cli", "command": "'$PARAKEET_DIR'/parakeet-audio-client.py", "args": ["{{MediaPath}}", "{{OutputDir}}"]}]'
-    fi
+    # Fallback: manual instructions
+    echo ""
+    echo "Please manually add to your openclaw.json:"
+    echo ""
+    echo '  "tools": {'
+    echo '    "media": {'
+    echo '      "audio": {'
+    echo '        "models": [{'
+    echo '          "type": "cli",'
+    echo '          "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
+    echo '          "args": ["{{MediaPath}}", "{{OutputDir}}"]'
+    echo '        }]'
+    echo '      }'
+    echo '    }'
+    echo '  }'
+    echo ""
+    echo "Then run: openclaw gateway restart"
 }
 
 configure_openclaw || true

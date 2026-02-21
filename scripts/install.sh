@@ -147,7 +147,7 @@ done
 configure_openclaw() {
     echo "Configuring OpenClaw to use Parakeet for audio transcription..."
     
-    # Use config.patch RPC for partial update (no jq needed)
+    # Try config.patch first (partial update)
     if command -v openclaw &> /dev/null; then
         openclaw gateway call config.patch --params '{
             "patch": {
@@ -164,32 +164,25 @@ configure_openclaw() {
                 }
             }
         }' 2>/dev/null && {
-            echo "Applied config.patch - Parakeet configured and gateway reloaded"
+            echo "Config updated via config.patch"
+            echo ""
+            echo "IMPORTANT: Restart the gateway to activate transcription:"
+            echo "  openclaw gateway restart"
             return 0
-        } || {
-            echo "Warning: config.patch failed"
         }
-    else
-        echo "Warning: openclaw CLI not found"
     fi
     
     # Fallback: manual instructions
     echo ""
-    echo "Please manually add to your openclaw.json:"
+    echo "Please add to your openclaw.json under tools.media.audio:"
     echo ""
-    echo '  "tools": {'
-    echo '    "media": {'
-    echo '      "audio": {'
-    echo '        "models": [{'
-    echo '          "type": "cli",'
-    echo '          "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
-    echo '          "args": ["{{MediaPath}}", "{{OutputDir}}"]'
-    echo '        }]'
-    echo '      }'
-    echo '    }'
-    echo '  }'
+    echo '  "models": [{'
+    echo '    "type": "cli",'
+    echo '    "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
+    echo '    "args": ["{{MediaPath}}", "{{OutputDir}}"]'
+    echo '  }]'
     echo ""
-    echo "Then run: openclaw gateway restart"
+    echo "Then restart: openclaw gateway restart"
 }
 
 configure_openclaw || true
@@ -206,4 +199,7 @@ echo "To switch models, run:"
 echo "  $0 v2  # English optimized"
 echo "  $0 v3  # Multilingual"
 echo ""
-echo "Audio transcription is now configured and ready."
+echo "IMPORTANT: Apply config to activate transcription:"
+echo "  openclaw gateway call config.apply --params '{\"note\": \"Parakeet STT\"}'"
+echo ""
+echo "Or restart the gateway service completely."

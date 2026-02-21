@@ -151,14 +151,6 @@ configure_openclaw() {
         return 1
     fi
     
-    # Check if jq is available
-    if ! command -v jq &> /dev/null; then
-        echo "Warning: jq not found, skipping automatic config"
-        echo "Please manually add to openclaw.json:"
-        echo '  tools.media.audio.models: [{"type": "cli", "command": "'$PARAKEET_DIR'/parakeet-audio-client.py", "args": ["{{MediaPath}}", "{{OutputDir}}"]}]'
-        return 1
-    fi
-    
     # Check if parakeet is already configured
     if jq -e '.tools.media.audio.models[]? | select(.command | contains("parakeet"))' "$OPENCLAW_CONFIG" > /dev/null 2>&1; then
         echo "Parakeet already configured in OpenClaw"
@@ -167,35 +159,54 @@ configure_openclaw() {
     
     echo "Configuring OpenClaw to use Parakeet for audio transcription..."
     
-    # Add parakeet to audio models
-    local tmp_config=$(mktemp)
-    jq '.tools.media.audio.models += [{
-        "type": "cli",
-        "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
-        "args": ["{{MediaPath}}", "{{OutputDir}}"]
-    }]' "$OPENCLAW_CONFIG" > "$tmp_config" && mv "$tmp_config" "$OPENCLAW_CONFIG"
-    
-    echo "Added Parakeet to tools.media.audio.models"
-}
-
-configure_openclaw || true
-
-# Apply config changes properly (requires config.apply, not just restart)
-apply_config() {
+    # Use config.patch RPC for partial update (cleaner than modifying file directly)
     if command -v openclaw &> /dev/null; then
-        echo ""
-        echo "Applying configuration to OpenClaw gateway..."
-        openclaw gateway call config.apply --params '{"raw": "'$(cat "$OPENCLAW_CONFIG" | jq -c '.')'", "note": "Parakeet STT installation"}' 2>/dev/null || {
-            echo "Note: Could not apply config automatically. Please run:"
-            echo "  openclaw gateway restart"
+        local patch_json=$(cat <<EOF
+{
+  "patch": {
+    "tools": {
+      "media": {
+        "audio": {
+          "models": [
+            {
+              "type": "cli",
+              "command": "$PARAKEET_DIR/parakeet-audio-client.py",
+              "args": ["{{MediaPath}}", "{{OutputDir}}"]
+            }
+          ]
         }
+      }
+    }
+  }
+}
+EOF
+)
+        openclaw gateway call config.patch --params "$patch_json" 2>/dev/null && {
+            echo "Applied config.patch - Parakeet configured and gateway reloaded"
+            return 0
+        } || {
+            echo "config.patch failed, falling back to file modification..."
+        }
+    fi
+    
+    # Fallback: modify config file directly if jq available
+    if command -v jq &> /dev/null; then
+        local tmp_config=$(mktemp)
+        jq '.tools.media.audio.models += [{
+            "type": "cli",
+            "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
+            "args": ["{{MediaPath}}", "{{OutputDir}}"]
+        }]' "$OPENCLAW_CONFIG" > "$tmp_config" && mv "$tmp_config" "$OPENCLAW_CONFIG"
+        echo "Added Parakeet to tools.media.audio.models (file modified directly)"
+        echo "Note: Gateway will auto-reload, or run: openclaw gateway restart"
+    else
+        echo "Warning: jq not found, skipping automatic config"
+        echo "Please manually add to openclaw.json:"
+        echo '  tools.media.audio.models: [{"type": "cli", "command": "'$PARAKEET_DIR'/parakeet-audio-client.py", "args": ["{{MediaPath}}", "{{OutputDir}}"]}]'
     fi
 }
 
-# Only apply if we added new config
-if jq -e '.tools.media.audio.models[]? | select(.command | contains("parakeet"))' "$OPENCLAW_CONFIG" > /dev/null 2>&1; then
-    apply_config
-fi
+configure_openclaw || true
 
 echo ""
 echo "=== Installation Complete ==="

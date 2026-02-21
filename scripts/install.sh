@@ -9,9 +9,12 @@ set -e
 PARAKEET_DIR="${PARAKEET_DIR:-$HOME/.openclaw/tools/parakeet}"
 VENV_DIR="$PARAKEET_DIR/.venv"
 
-# Model URLs (from Handy project)
-MODEL_URLS_V2="https://blob.handy.computer/parakeet-v2-int8.tar.gz"
-MODEL_URLS_V3="https://blob.handy.computer/parakeet-v3-int8.tar.gz"
+# Model URLs (GitHub release - mirrored from Handy project)
+# Fallback to Handy if GitHub is unavailable
+MODEL_URLS_V2="https://github.com/Nicfox77/openclaw-parakeet-stt-plugin/releases/download/v1.0.0/parakeet-v2-int8.tar.gz"
+MODEL_URLS_V2_FALLBACK="https://blob.handy.computer/parakeet-v2-int8.tar.gz"
+MODEL_URLS_V3="https://github.com/Nicfox77/openclaw-parakeet-stt-plugin/releases/download/v1.0.0/parakeet-v3-int8.tar.gz"
+MODEL_URLS_V3_FALLBACK="https://blob.handy.computer/parakeet-v3-int8.tar.gz"
 
 # Default to V2 (English optimized)
 VERSION="${1:-v2}"
@@ -77,13 +80,32 @@ if [ ! -d "$MODEL_DIR" ] || [ ! -f "$MODEL_DIR/model.onnx" ]; then
     
     TMP_TAR="/tmp/parakeet-$VERSION-int8.tar.gz"
     
-    if command -v wget &> /dev/null; then
-        wget -O "$TMP_TAR" "$MODEL_URL"
-    elif command -v curl &> /dev/null; then
-        curl -L -o "$TMP_TAR" "$MODEL_URL"
-    else
-        echo "Error: wget or curl required for download"
-        exit 1
+    download_model() {
+        local url="$1"
+        local output="$2"
+        if command -v wget &> /dev/null; then
+            wget -O "$output" "$url"
+        elif command -v curl &> /dev/null; then
+            curl -L -o "$output" "$url"
+        else
+            echo "Error: wget or curl required for download"
+            return 1
+        fi
+    }
+    
+    # Try primary URL, fall back to Handy if it fails
+    if ! download_model "$MODEL_URL" "$TMP_TAR"; then
+        echo "Primary download failed, trying fallback..."
+        FALLBACK_URL=""
+        if [[ "$VERSION" == "v2" ]]; then
+            FALLBACK_URL="$MODEL_URLS_V2_FALLBACK"
+        else
+            FALLBACK_URL="$MODEL_URLS_V3_FALLBACK"
+        fi
+        if ! download_model "$FALLBACK_URL" "$TMP_TAR"; then
+            echo "Error: Failed to download model"
+            exit 1
+        fi
     fi
     
     echo "Extracting model..."

@@ -8,6 +8,7 @@ set -e
 # Configuration
 PARAKEET_DIR="${PARAKEET_DIR:-$HOME/.openclaw/tools/parakeet}"
 VENV_DIR="$PARAKEET_DIR/.venv"
+OPENCLAW_CONFIG="$HOME/.openclaw/openclaw.json"
 
 # Model URLs (GitHub release - mirrored from Handy project)
 # Fallback to Handy if GitHub is unavailable
@@ -143,6 +144,42 @@ for script in parakeet-lazy-daemon.py parakeet-audio-client.py parakeet_transcri
     fi
 done
 
+# Configure OpenClaw to use Parakeet for audio transcription
+configure_openclaw() {
+    if [ ! -f "$OPENCLAW_CONFIG" ]; then
+        echo "Warning: OpenClaw config not found at $OPENCLAW_CONFIG"
+        return 1
+    fi
+    
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Warning: jq not found, skipping automatic config"
+        echo "Please manually add to openclaw.json:"
+        echo '  tools.media.audio.models: [{"type": "cli", "command": "'$PARAKEET_DIR'/parakeet-audio-client.py", "args": ["{{MediaPath}}", "{{OutputDir}}"]}]'
+        return 1
+    fi
+    
+    # Check if parakeet is already configured
+    if jq -e '.tools.media.audio.models[]? | select(.command | contains("parakeet"))' "$OPENCLAW_CONFIG" > /dev/null 2>&1; then
+        echo "Parakeet already configured in OpenClaw"
+        return 0
+    fi
+    
+    echo "Configuring OpenClaw to use Parakeet for audio transcription..."
+    
+    # Add parakeet to audio models
+    local tmp_config=$(mktemp)
+    jq '.tools.media.audio.models += [{
+        "type": "cli",
+        "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
+        "args": ["{{MediaPath}}", "{{OutputDir}}"]
+    }]' "$OPENCLAW_CONFIG" > "$tmp_config" && mv "$tmp_config" "$OPENCLAW_CONFIG"
+    
+    echo "Added Parakeet to tools.media.audio.models"
+}
+
+configure_openclaw || true
+
 echo ""
 echo "=== Installation Complete ==="
 echo ""
@@ -155,5 +192,5 @@ echo "To switch models, run:"
 echo "  $0 v2  # English optimized"
 echo "  $0 v3  # Multilingual"
 echo ""
-echo "OpenClaw config (already configured):"
-echo '  tools.media.audio.models → parakeet-audio-client.py'
+echo "Restart OpenClaw gateway to apply changes:"
+echo "  openclaw gateway restart"

@@ -1,6 +1,6 @@
 {
   "name": "@nicfox77/parakeet-stt",
-  "version": "0.2.6",
+  "version": "0.2.8",
   "description": "Parakeet TDT INT8 speech-to-text plugin for OpenClaw. Supports V2 (English) and V3 (Multilingual) models.",
   "type": "module",
   "repository": {
@@ -22,6 +22,8 @@
     "@sinclair/typebox": "0.34.48"
   },
   "openclaw": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   }
 }

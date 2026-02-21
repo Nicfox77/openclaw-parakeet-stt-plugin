@@ -147,42 +147,46 @@ done
 configure_openclaw() {
     echo "Configuring OpenClaw to use Parakeet for audio transcription..."
     
-    # Try config.patch first (partial update)
+    # Use config.patch RPC for partial update
     if command -v openclaw &> /dev/null; then
-        openclaw gateway call config.patch --params '{
-            "patch": {
-                "tools": {
-                    "media": {
-                        "audio": {
-                            "models": [{
-                                "type": "cli",
-                                "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",
-                                "args": ["{{MediaPath}}", "{{OutputDir}}"]
-                            }]
-                        }
-                    }
-                }
+        # Get current config hash (required for config.patch)
+        # Hash is at root level in the response, extract with grep
+        CONFIG_HASH=$(openclaw gateway call config.get --params '{}' --json 2>/dev/null | grep -oP '"hash"\s*:\s*"\K[^"]+' | tail -1)
+        
+        if [ -n "$CONFIG_HASH" ] && [ "$CONFIG_HASH" != "null" ]; then
+            openclaw gateway call config.patch --params '{
+                "raw": "{ tools: { media: { audio: { models: [{ \"type\": \"cli\", \"command\": \"'$PARAKEET_DIR'/parakeet-audio-client.py\", \"args\": [\"{{MediaPath}}\"] }] } } } } }",
+                "baseHash": "'$CONFIG_HASH'"
+            }' 2>/dev/null && {
+                echo "Applied config.patch - Parakeet configured and gateway reloaded"
+                return 0
+            } || {
+                echo "Warning: config.patch failed"
             }
-        }' 2>/dev/null && {
-            echo "Config updated via config.patch"
-            echo ""
-            echo "IMPORTANT: Restart the gateway to activate transcription:"
-            echo "  openclaw gateway restart"
-            return 0
-        }
+        else
+            echo "Warning: Could not get config hash for config.patch"
+        fi
+    else
+        echo "Warning: openclaw CLI not found"
     fi
     
     # Fallback: manual instructions
     echo ""
-    echo "Please add to your openclaw.json under tools.media.audio:"
+    echo "Please manually add to your openclaw.json:"
     echo ""
-    echo '  "models": [{'
-    echo '    "type": "cli",'
-    echo '    "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
-    echo '    "args": ["{{MediaPath}}", "{{OutputDir}}"]'
-    echo '  }]'
+    echo '  "tools": {'
+    echo '    "media": {'
+    echo '      "audio": {'
+    echo '        "models": [{'
+    echo '          "type": "cli",'
+    echo '          "command": "'$PARAKEET_DIR'/parakeet-audio-client.py",'
+    echo '          "args": ["{{MediaPath}}"]'
+    echo '        }]'
+    echo '      }'
+    echo '    }'
+    echo '  }'
     echo ""
-    echo "Then restart: openclaw gateway restart"
+    echo "Then run: openclaw gateway restart"
 }
 
 configure_openclaw || true
@@ -199,7 +203,4 @@ echo "To switch models, run:"
 echo "  $0 v2  # English optimized"
 echo "  $0 v3  # Multilingual"
 echo ""
-echo "IMPORTANT: Apply config to activate transcription:"
-echo "  openclaw gateway call config.apply --params '{\"note\": \"Parakeet STT\"}'"
-echo ""
-echo "Or restart the gateway service completely."
+echo "Audio transcription is now configured and ready."

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+"""
+Parakeet Audio Client for OpenClaw
+Transcribes audio files using the Parakeet lazy daemon.
+Outputs transcript to stdout (OpenClaw CLI model requirement).
+"""
 import json
 import os
 import socket
@@ -10,7 +15,7 @@ SOCKET_PATH = "/tmp/parakeet-lazy.sock"
 DAEMON_PATH = os.path.expanduser("~/.openclaw/tools/parakeet/parakeet-lazy-daemon.py")
 
 def ensure_daemon():
-    # Check if daemon socket exists and responsive
+    """Check if daemon is running, start it if not."""
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(0.5)
@@ -32,6 +37,7 @@ def ensure_daemon():
         sys.exit(1)
 
 def query_daemon(audio_path):
+    """Query the daemon for transcription."""
     for attempt in range(3):
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -49,25 +55,36 @@ def query_daemon(audio_path):
             if response_data:
                 response = json.loads(response_data.strip())
                 if "text" in response:
-                    print(response["text"])
-                    return 0
+                    return response["text"]
                 else:
                     print(response.get("error", "Unknown error"), file=sys.stderr)
-                    return 1
+                    return None
             else:
                 time.sleep(0.5)
         except Exception as e:
             if attempt == 2:
                 print(f"Daemon communication failed: {e}", file=sys.stderr)
-                return 1
+                return None
             time.sleep(0.5)
-    return 1
+    return None
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: parakeet-audio-client.py <audio_path> [output_dir]", file=sys.stderr)
+        print("Usage: parakeet-audio-client.py <audio_path>", file=sys.stderr)
         sys.exit(1)
+    
     audio_path = sys.argv[1]
-    # output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    # Start daemon if needed
     ensure_daemon()
-    sys.exit(query_daemon(audio_path))
+    
+    # Get transcription
+    transcript = query_daemon(audio_path)
+    
+    if transcript:
+        # Output transcript to stdout (OpenClaw reads stdout for CLI transcribers)
+        print(transcript)
+        sys.exit(0)
+    else:
+        print("Transcription failed", file=sys.stderr)
+        sys.exit(1)

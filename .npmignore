@@ -1,0 +1,9 @@
+# Development files
+*.log
+node_modules/
+
+# Keep scripts (needed for install)
+!scripts/
+
+# Keep skills
+!skills/

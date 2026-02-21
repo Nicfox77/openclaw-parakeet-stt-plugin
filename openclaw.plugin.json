@@ -1,0 +1,71 @@
+{
+  "id": "parakeet-stt",
+  "name": "Parakeet STT",
+  "description": "Fast CPU-based speech-to-text using Parakeet TDT INT8 models. 4x faster than real-time. Supports V2 (English optimized) and V3 (multilingual).",
+  "version": "0.2.0",
+  "skills": ["skills/parakeet"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "modelVersion": {
+        "type": "string",
+        "enum": ["v2", "v3"],
+        "default": "v2",
+        "description": "Model version: v2 for English (higher accuracy), v3 for multilingual (25 languages, auto-detect)"
+      },
+      "modelPath": {
+        "type": "string",
+        "description": "Path to the Parakeet ONNX model directory (auto-set based on modelVersion)"
+      },
+      "daemonPath": {
+        "type": "string",
+        "description": "Path to the parakeet daemon script"
+      },
+      "timeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "default": 30000,
+        "description": "Timeout for transcription requests"
+      },
+      "inactivityTimeoutMin": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 20,
+        "description": "Minutes of inactivity before unloading the model"
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Parakeet STT"
+    },
+    "modelVersion": {
+      "label": "Model Version",
+      "help": "v2 = English optimized (higher accuracy), v3 = Multilingual (25 European languages with auto-detect)"
+    },
+    "modelPath": {
+      "label": "Model Path",
+      "placeholder": "~/.openclaw/tools/parakeet/model",
+      "help": "Directory containing the Parakeet ONNX model files",
+      "advanced": true
+    },
+    "daemonPath": {
+      "label": "Daemon Script Path",
+      "placeholder": "~/.openclaw/tools/parakeet/parakeet-lazy-daemon.py",
+      "advanced": true
+    },
+    "timeoutMs": {
+      "label": "Request Timeout (ms)",
+      "advanced": true
+    },
+    "inactivityTimeoutMin": {
+      "label": "Inactivity Timeout (minutes)",
+      "help": "How long before the model unloads to save memory",
+      "advanced": true
+    }
+  }
+}

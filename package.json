@@ -1,0 +1,27 @@
+{
+  "name": "@nicfox77/parakeet-stt",
+  "version": "0.2.0",
+  "description": "Parakeet TDT INT8 speech-to-text plugin for OpenClaw. Supports V2 (English) and V3 (Multilingual) models.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nicfox77/openclaw-parakeet-stt.git"
+  },
+  "author": "Nicfox77",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "parakeet",
+    "stt",
+    "speech-to-text",
+    "transcription",
+    "asr",
+    "nvidia"
+  ],
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

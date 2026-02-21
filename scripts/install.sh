@@ -180,6 +180,23 @@ configure_openclaw() {
 
 configure_openclaw || true
 
+# Apply config changes properly (requires config.apply, not just restart)
+apply_config() {
+    if command -v openclaw &> /dev/null; then
+        echo ""
+        echo "Applying configuration to OpenClaw gateway..."
+        openclaw gateway call config.apply --params '{"raw": "'$(cat "$OPENCLAW_CONFIG" | jq -c '.')'", "note": "Parakeet STT installation"}' 2>/dev/null || {
+            echo "Note: Could not apply config automatically. Please run:"
+            echo "  openclaw gateway restart"
+        }
+    fi
+}
+
+# Only apply if we added new config
+if jq -e '.tools.media.audio.models[]? | select(.command | contains("parakeet"))' "$OPENCLAW_CONFIG" > /dev/null 2>&1; then
+    apply_config
+fi
+
 echo ""
 echo "=== Installation Complete ==="
 echo ""
@@ -192,5 +209,4 @@ echo "To switch models, run:"
 echo "  $0 v2  # English optimized"
 echo "  $0 v3  # Multilingual"
 echo ""
-echo "Restart OpenClaw gateway to apply changes:"
-echo "  openclaw gateway restart"
+echo "Audio transcription is now configured and ready."
